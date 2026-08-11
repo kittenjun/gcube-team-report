@@ -10,7 +10,11 @@ GCUBE 팀 작업현황 리포트 생성기 (GitHub Actions / 로컬 공용).
     AZDO_MEMBERS  (선택) 쉼표구분 displayName. 기본: 조광현,권상준,장호진,임채윤,구지연
 - 출력: index.html (현재 디렉터리)
 - 조회 범위: 실행 시각 기준 최근 30일(rolling) 이후 System.ChangedDate, State!=Removed, 대상 팀원.
-- 팀원별 업무 내역 요약: 최근 14일 이내 변경된 항목만 기준으로 작성.
+- 팀원별 업무 내역:
+    · 완료 항목 = 최근 7일(DONE_DAYS) 이내 완료일(ClosedDate) 기준 항목 목록 + 직전 7일 대비 증감
+    · 진행 항목 = 현재 열려 있는(Done 아님) 항목 전체 목록 (상태·정체 원인·체류일 포함)
+    · 30일 종합 서술은 접이식(details)으로 유지
+- 항목 상세(⑦): 팀원 칩 필터로 완료/열림 표를 동시에 필터링.
 
 로컬 테스트: AZDO_PAT 없이 `TEST=1 python generate_report.py` 로 실행하면
 data.json(미리 만들어 둔 동일 구조)을 읽어 index.html 생성만 검증한다.
@@ -25,7 +29,8 @@ MEMBERS = [m.strip() for m in os.environ.get(
     "AZDO_MEMBERS", "조광현,권상준,장호진,임채윤,구지연").split(",") if m.strip()]
 
 WINDOW_DAYS  = 30   # 전체 리포트 조회 범위
-SUMMARY_DAYS = 14   # 팀원별 업무 내역 요약 기준 범위
+SUMMARY_DAYS = 14   # 팀원별 30일 종합 서술의 "최근 활동" 기준 범위 (= 직전 7일 구간의 시작점)
+DONE_DAYS    = 7    # 팀원별 "완료 항목" 요약 기준 범위
 
 BASE = "https://dev.azure.com/{}/{}/_apis/wit/".format(ORG, PROJECT)
 
@@ -262,8 +267,7 @@ h2.sec{font-size:16px;margin:26px 0 12px;padding-left:10px;border-left:4px solid
 .pill{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--chipbg);color:var(--brand);font-weight:600}
 .pill.ok{background:#dcfce7;color:#15803d}.pill.inp{background:#fef3c7;color:#b45309}.pill.new{background:#e0f2fe;color:#0369a1}
 .pill.rev{background:#ede9fe;color:#6d28d9}.pill.bad{background:#fee2e2;color:#b91c1c}
-.mcards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:780px){.mcards{grid-template-columns:1fr}}
+.mcards{display:grid;grid-template-columns:1fr;gap:12px}
 .mcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
 .mcard .mh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 .mcard .mh b{font-size:15px}
@@ -301,6 +305,42 @@ tbody tr.donerow:hover{background:#f1f8f1}
 .proj-tag{font-size:10.5px;color:var(--brand2);font-weight:600}
 .legend{font-size:11px;color:var(--muted);margin:4px 0 0}
 .footer{margin-top:30px;font-size:11px;color:var(--muted);text-align:center}
+/* ③ 팀원별 업무 내역 — 완료/진행 2단 */
+.mcard .mh b.wlink{cursor:pointer;border-bottom:1px dashed #cbd5e1}
+.mcard .mh b.wlink:hover{color:var(--brand)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;min-width:0}
+@media(max-width:980px){.mgrid{grid-template-columns:1fr}}
+.mcard{min-width:0;overflow:hidden}
+.mcol{background:#fafbfe;border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;overflow:hidden}
+.mcol .ch{font-size:12.4px;font-weight:700;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.mcol .ch.d{color:var(--ok)}.mcol .ch.o{color:var(--warn)}
+.mcol .ch .sub{font-weight:400;color:var(--muted);font-size:11px;margin-left:4px}
+ul.ilist{list-style:none;margin:0;padding:0}
+ul.ilist li{display:flex;gap:6px;align-items:center;padding:4px 2px;font-size:12.2px;border-bottom:1px dashed var(--line);cursor:pointer}
+ul.ilist li:last-child{border-bottom:0}
+ul.ilist li:hover{background:#eef4ff}
+ul.ilist .dt{color:var(--muted);font-size:10.8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+ul.ilist .it{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mnote{font-size:11.2px;color:var(--muted);margin-top:7px;word-break:break-word}
+.mnote.bad{color:var(--bad)}
+.mempty{font-size:11.8px;color:var(--muted);padding:6px 2px}
+.more{font-size:11.2px;color:var(--muted);margin-top:5px}
+.more a{color:var(--brand);text-decoration:none;cursor:pointer}
+details.nar{margin-top:8px}
+details.nar summary{font-size:11.5px;color:var(--muted);cursor:pointer}
+details.nar p{margin:6px 0 0;font-size:12.5px}
+.delta{font-size:11px;font-weight:600}
+.delta.up{color:var(--ok)}.delta.down{color:var(--bad)}.delta.flat{color:var(--muted)}
+/* ⑦ 팀원 칩 필터 */
+.filter{display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0 12px}
+.filter .fl{font-size:11.8px;color:var(--muted);margin-right:2px}
+.chip{font:inherit;font-size:12.2px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:5px 11px;cursor:pointer;display:inline-flex;gap:5px;align-items:center;color:var(--ink)}
+.chip:hover{border-color:var(--brand)}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.chip .c{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.chip.on .c{color:#dbeafe}
+.fhint{font-size:11px;color:var(--muted);margin-left:auto}
+@media(max-width:880px){.fhint{display:none}}
 </style>
 </head>
 <body>
@@ -312,7 +352,7 @@ tbody tr.donerow:hover{background:#f1f8f1}
   <b>조회 범위</b> <span id="rangeLabel"></span> (최근 30일 롤링) &nbsp;·&nbsp;
   <b>대상</b> <span id="memLabel"></span>
  </div>
- <div class="note">※ State="Removed"(삭제) 항목 제외 &nbsp;|&nbsp; 팀원별 업무 요약은 최근 14일 기준 &nbsp;|&nbsp; 데이터: Azure DevOps · GCUBE · 자동 생성</div>
+ <div class="note">※ State="Removed"(삭제) 항목 제외 &nbsp;|&nbsp; 팀원별 완료 항목은 최근 7일 · 진행 항목은 현재 열림 전체 &nbsp;|&nbsp; 데이터: Azure DevOps · GCUBE · 자동 생성</div>
 </header>
 
 <h2 class="sec">① 핵심 지표 (KPI)</h2>
@@ -321,7 +361,7 @@ tbody tr.donerow:hover{background:#f1f8f1}
 <h2 class="sec">② 프로젝트별 현황</h2>
 <div class="cards" id="cards"></div>
 
-<h2 class="sec">③ 팀원별 업무 내역 요약 <span style="font-size:12px;color:var(--muted);font-weight:400">(최근 14일)</span></h2>
+<h2 class="sec">③ 팀원별 업무 내역 <span style="font-size:12px;color:var(--muted);font-weight:400">(완료: 최근 7일 · 진행: 현재 열림 전체)</span></h2>
 <p class="summ-note" id="summNote"></p>
 <div class="mcards" id="memSummary"></div>
 
@@ -348,8 +388,9 @@ tbody tr.donerow:hover{background:#f1f8f1}
  </tr></thead><tbody id="memBody"></tbody></table>
 </div>
 
-<h2 class="sec">⑦ 항목 상세</h2>
+<h2 class="sec" id="detail">⑦ 항목 상세</h2>
 <p class="legend">행을 클릭하면 Azure DevOps 작업 항목으로 이동합니다. 완료 항목과 열림(진행·신규) 항목을 분리해 표시합니다.</p>
+<div class="filter" id="whoFilter"></div>
 <div class="tabtitle"><span class="dot ok"></span>완료 항목 <span class="cnt" id="doneCount"></span></div>
 <div class="tbl-scroll">
  <table><thead><tr>
@@ -374,6 +415,7 @@ const RANGELABEL = "__RANGELABEL__";
 const MEMLABEL = "__MEMLABEL__";
 const EDIT_BASE = "__EDITBASE__";
 const CUT14 = "__CUT14__";
+const CUT7 = "__CUT7__";
 const A=D.a,P=D.p,R=D.r,T=D.t,S=D.s,ROWS=D.rows;
 const C={id:0,type:1,state:2,assignee:3,created:4,closed:5,title:6,desc:7,project:8,dwell:9,carry:10,reason:11,cycle:12,changed:13};
 const iDone=S.indexOf('Done'),iInp=S.indexOf('In Progress'),iNew=S.indexOf('New'),iRev=S.indexOf('In Review');
@@ -453,18 +495,81 @@ function narrative(m){
  const md=median(d.map(r=>r[C.cycle]).filter(v=>v!=null));
  return {badges:{done:d.length,inp:ip.length,nw:nn.length,rev:rv.length,stag:wn.length},cyc:md,text:parts.join(' ')};
 }
+/* ③-2 완료 항목(최근 7일) / 진행 항목(현재 열림) 상세 목록 */
+const SRANK={'In Progress':0,'In Review':1,'Blocked':2,'Ready':3,'New':4};
+const SSHORT={'In Progress':'진행','In Review':'리뷰','Blocked':'블록','Ready':'준비','New':'신규','Done':'완료'};
+function srank(si){const v=SRANK[S[si]];return v==null?9:v;}
+function sshort(si){return SSHORT[S[si]]||S[si];}
+function deltaTag(d){const c=d>0?'up':(d<0?'down':'flat');
+ const t=d>0?('▲ '+d):(d<0?('▼ '+(-d)):'± 0');return `<span class="delta ${c}">${t}</span>`;}
+function liDone(r){return `<li onclick="window.open('${EDIT}${r[C.id]}','_blank')" title="#${r[C.id]} ${esc(r[C.title])}">
+ <span class="dt">${esc((r[C.closed]||'').slice(5))}</span>
+ <span class="proj-tag">${esc(P[r[C.project]])}</span>
+ <span class="it">${esc(r[C.title])}</span>
+ <span class="tg s-Ready">${esc(T[r[C.type]])}</span></li>`;}
+function liOpen(r){
+ const bad=r[C.reason]!==iNormal;
+ const dw=(r[C.dwell]==null?'':' · '+r[C.dwell]+'일');
+ return `<li onclick="window.open('${EDIT}${r[C.id]}','_blank')" title="#${r[C.id]} ${esc(r[C.title])}">
+ <span class="tg s-${S[r[C.state]].replace(/\s/g,'')}">${esc(sshort(r[C.state]))}</span>
+ <span class="proj-tag">${esc(P[r[C.project]])}</span>
+ <span class="it">${esc(r[C.title])}</span>
+ ${bad?('<span class="rn">'+esc(R[r[C.reason]])+esc(dw)+'</span>'):''}</li>`;}
+
+const done7All=done.filter(r=>r[C.closed]&&r[C.closed]>=CUT7);
+const prev7All=done.filter(r=>r[C.closed]&&r[C.closed]>=CUT14&&r[C.closed]<CUT7);
+document.getElementById('summNote').innerHTML=
+ `<b>완료 항목</b> = 최근 7일(${CUT7} ~ ${GENDATE}) 완료일 기준, <b>진행 항목</b> = 현재 열려 있는 항목 전체. `+
+ `팀 전체 최근 7일 완료 <b>${done7All.length}건</b> (직전 7일 ${prev7All.length}건 대비 ${deltaTag(done7All.length-prev7All.length)}) · `+
+ `팀원 이름을 클릭하면 아래 ⑦ 항목 상세가 해당 팀원으로 필터링됩니다.`;
+
+const LIST_CAP=8;
 const summOrder=A.filter(m=>m);
-document.getElementById('memSummary').innerHTML=summOrder.map(m=>{const n=narrative(m);const b=n.badges;return `
- <div class="mcard">
-  <div class="mh"><b>${esc(m)}</b><span class="cyc">사이클타임 중앙값 ${n.cyc==null?'–':n.cyc+'일'}</span></div>
+document.getElementById('memSummary').innerHTML=summOrder.map(m=>{
+ const rr=ROWS.filter(r=>A[r[C.assignee]]===m);
+ const d30=rr.filter(r=>r[C.state]===iDone);
+ const d7=d30.filter(r=>r[C.closed]&&r[C.closed]>=CUT7)
+             .sort((a,b)=>(b[C.closed]||'').localeCompare(a[C.closed]||''));
+ const p7=d30.filter(r=>r[C.closed]&&r[C.closed]>=CUT14&&r[C.closed]<CUT7);
+ const op=rr.filter(r=>r[C.state]!==iDone)
+            .sort((a,b)=>(srank(a[C.state])-srank(b[C.state]))||((b[C.dwell]||0)-(a[C.dwell]||0)));
+ const stg=op.filter(r=>r[C.reason]!==iNormal);
+ const sc={};op.forEach(r=>{const k=sshort(r[C.state]);sc[k]=(sc[k]||0)+1;});
+ const brk=Object.keys(sc).map(k=>k+' '+sc[k]).join(' · ');
+ const mcyc=median(d30.map(r=>r[C.cycle]).filter(v=>v!=null));
+ const pc={};d30.forEach(r=>{const p=P[r[C.project]];pc[p]=(pc[p]||0)+1;});
+ const tops=Object.keys(pc).sort((x,y)=>pc[y]-pc[x]).slice(0,3).map(p=>p+' '+pc[p]).join(', ');
+ const n=narrative(m);
+ return `
+ <div class="mcard" data-who="${esc(m)}">
+  <div class="mh"><b class="wlink" onclick="pickWho('${esc(m)}')" title="항목 상세에서 ${esc(m)} 보기">${esc(m)}</b>
+   <span class="cyc">사이클타임 중앙값 ${mcyc==null?'–':mcyc+'일'}</span></div>
   <div class="badges">
-   <span class="pill ok">완료 ${b.done}</span>
-   <span class="pill inp">진행 ${b.inp}</span>
-   <span class="pill new">신규 ${b.nw}</span>
-   <span class="pill rev">리뷰 ${b.rev}</span>
-   <span class="pill bad">정체 ${b.stag}</span>
+   <span class="pill ok">최근 7일 완료 ${d7.length}</span>
+   <span class="pill">30일 완료 ${d30.length}</span>
+   <span class="pill inp">진행 ${sc['진행']||0}</span>
+   <span class="pill rev">리뷰 ${sc['리뷰']||0}</span>
+   <span class="pill new">신규 ${sc['신규']||0}</span>
+   <span class="pill bad">정체 ${stg.length}</span>
   </div>
-  <p class="txt">${n.text}</p>
+  <div class="mgrid">
+   <div class="mcol">
+    <div class="ch d">완료 항목<span class="sub">최근 7일 · ${d7.length}건 ${deltaTag(d7.length-p7.length)} (직전 7일 ${p7.length}건)</span></div>
+    ${d7.length?('<ul class="ilist">'+d7.slice(0,LIST_CAP).map(liDone).join('')+'</ul>'
+      +(d7.length>LIST_CAP?`<div class="more">외 ${d7.length-LIST_CAP}건</div>`:''))
+     :'<div class="mempty">최근 7일간 완료된 항목이 없습니다.</div>'}
+    <div class="mnote">30일 누적 완료 ${d30.length}건${tops?' · 주요 영역: '+esc(tops):''}</div>
+   </div>
+   <div class="mcol">
+    <div class="ch o">진행 항목<span class="sub">현재 ${op.length}건${brk?' · '+brk:''}</span></div>
+    ${op.length?('<ul class="ilist">'+op.slice(0,LIST_CAP).map(liOpen).join('')+'</ul>'
+      +(op.length>LIST_CAP?`<div class="more">외 ${op.length-LIST_CAP}건 — <a onclick="pickWho('${esc(m)}')">항목 상세에서 보기</a></div>`:''))
+     :'<div class="mempty">현재 열려 있는 항목이 없습니다.</div>'}
+    ${stg.length?`<div class="mnote bad">정체 주의 ${stg.length}건 · 최장: '${esc(clip(stg[0][C.title],30))}' (${esc(R[stg[0][C.reason]])}${stg[0][C.dwell]==null?'':', 체류 '+stg[0][C.dwell]+'일'})</div>`
+     :'<div class="mnote">정체 주의 항목 없음</div>'}
+   </div>
+  </div>
+  <details class="nar"><summary>최근 14일 활동 서술 보기</summary><p>${n.text}</p></details>
  </div>`;}).join('');
 
 /* ④ 정체·병목 */
@@ -526,7 +631,37 @@ document.getElementById('openBody').innerHTML=openSorted.map(r=>{
   <td>${stateTag(r[C.state])}</td><td>${tail}</td>`);}).join('');
 
 function stateTag(si){const n=S[si];const cls='s-'+n.replace(/\s/g,'');return `<span class="tg ${cls}">${esc(n)}</span>`;}
-function rowTr(r,inner,cls){return `<tr class="${cls||''}" onclick="window.open('${EDIT}${r[C.id]}','_blank')">${inner}</tr>`;}
+function rowTr(r,inner,cls){return `<tr class="${cls||''}" data-who="${esc(A[r[C.assignee]])}" onclick="window.open('${EDIT}${r[C.id]}','_blank')">${inner}</tr>`;}
+
+/* ⑦ 팀원 칩 필터 — 완료/열림 표를 동시에 필터링 */
+const WHOALL='__all__';
+let curWho=WHOALL;
+(function buildChips(){
+ const el=document.getElementById('whoFilter');
+ if(!el)return;
+ const cntD=m=>done.filter(r=>A[r[C.assignee]]===m).length;
+ const cntO=m=>open.filter(r=>A[r[C.assignee]]===m).length;
+ el.innerHTML='<span class="fl">팀원별 조회</span>'
+  +`<button class="chip on" data-w="${WHOALL}">전체<span class="c">${done.length}·${open.length}</span></button>`
+  +summOrder.map(m=>`<button class="chip" data-w="${esc(m)}">${esc(m)}<span class="c">${cntD(m)}·${cntO(m)}</span></button>`).join('')
+  +'<span class="fhint">숫자는 완료·열림 건수 · 같은 칩을 다시 누르면 해제</span>';
+ el.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>pickWho(b.dataset.w)));
+})();
+function pickWho(w){
+ curWho=(curWho===w&&w!==WHOALL)?WHOALL:w;
+ document.querySelectorAll('#whoFilter .chip').forEach(c=>c.classList.toggle('on',c.dataset.w===curWho));
+ [['doneBody','doneCount'],['openBody','openCount']].forEach(function(p){
+  let n=0;
+  document.querySelectorAll('#'+p[0]+' tr').forEach(function(tr){
+   const hit=(curWho===WHOALL||tr.dataset.who===curWho);
+   tr.style.display=hit?'':'none';
+   if(hit)n++;});
+  document.getElementById(p[1]).textContent='('+n+'건'+(curWho===WHOALL?'':' · '+curWho)+')';});
+ document.querySelectorAll('.mcard').forEach(function(el){
+  el.style.boxShadow=(curWho!==WHOALL&&el.dataset.who===curWho)?'0 0 0 2px var(--brand)':'';});
+ if(curWho!==WHOALL){const t=document.getElementById('detail');
+  if(t)t.scrollIntoView({behavior:'smooth',block:'start'});}
+}
 
 const PALETTE=['#2563eb','#7c3aed','#16a34a','#d97706','#dc2626','#0891b2','#db2777','#65a30d','#64748b'];
 Chart.defaults.font.family='"Segoe UI","Malgun Gothic",sans-serif';
@@ -558,6 +693,7 @@ def build_html(obj):
     start = now - timedelta(days=WINDOW_DAYS)
     range_label = "%s ~ %s" % (start.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
     cut14 = (now - timedelta(days=SUMMARY_DAYS)).strftime("%Y-%m-%d")
+    cut7 = (now - timedelta(days=DONE_DAYS)).strftime("%Y-%m-%d")
     html = TEMPLATE
     html = html.replace("__DATA__", json.dumps(obj, ensure_ascii=False))
     html = html.replace("__PDESC__", json.dumps(PROJECT_DESC, ensure_ascii=False))
@@ -565,6 +701,7 @@ def build_html(obj):
     html = html.replace("__RANGELABEL__", range_label)
     html = html.replace("__MEMLABEL__", "·".join(MEMBERS))
     html = html.replace("__CUT14__", cut14)
+    html = html.replace("__CUT7__", cut7)
     html = html.replace("__EDITBASE__",
                         "https://dev.azure.com/%s/%s/_workitems/edit/" % (ORG, PROJECT))
     return html

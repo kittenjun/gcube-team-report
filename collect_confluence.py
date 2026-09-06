@@ -45,11 +45,11 @@ def collect(client):
         day = report_date(entry['title'])
         if not day:
             continue
-        if day in candidates:
-            raise ValueError(f'Duplicate weekly report date: {day}')
-        candidates[day] = entry
+        candidates.setdefault(day, {})[entry['id']] = entry
     for day in sorted(candidates, reverse=True)[:2]:
-        entry = candidates[day]
+        if len(candidates[day]) > 1:
+            raise ValueError(f'Duplicate recent weekly report date: {day}')
+        entry = next(iter(candidates[day].values()))
         page = client.get(f'/wiki/api/v2/pages/{entry["id"]}?body-format=storage')
         comments = list(client.pages(f'/wiki/api/v2/pages/{entry["id"]}/footer-comments?body-format=storage&limit=100'))
         reports[day] = dict(id=page['id'], title=page['title'], body='',

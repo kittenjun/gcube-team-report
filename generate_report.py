@@ -109,8 +109,8 @@ def reason(state, wtype, dwell, carry):
 
 # ---------------- data collection ----------------
 def collect():
-    now = datetime.now(timezone.utc)
-    window_start = now - timedelta(days=WINDOW_DAYS)
+    now = datetime.now(timezone(timedelta(hours=9)))
+    window_start = (now - timedelta(days=WINDOW_DAYS - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
     wiql = _post(BASE + "wiql?api-version=7.0",
                  {"query": "SELECT [System.Id] FROM WorkItems WHERE "
@@ -120,7 +120,7 @@ def collect():
     fields = ["System.Id", "System.WorkItemType", "System.State", "System.AssignedTo",
               "System.CreatedDate", "System.ChangedDate", "System.Title",
               "Microsoft.VSTS.Common.Priority", "Microsoft.VSTS.Common.ClosedDate",
-              "System.IterationPath"]
+              "System.IterationPath", "System.Tags"]
     items = []
     for i in range(0, len(ids), 200):
         batch = _post(BASE + "workitemsbatch?api-version=7.0",
@@ -131,7 +131,7 @@ def collect():
         a = f.get("System.AssignedTo") or {}
         nm = a.get("displayName", "") or ""
         for t in MEMBERS:
-            if t in nm:
+            if t == nm:
                 return t
         return None
 
@@ -143,7 +143,7 @@ def collect():
         if member_of(f) is None:
             continue
         ch = parse_dt(f.get("System.ChangedDate"))
-        if ch is None or ch < window_start:
+        if f.get("System.State") == "Done" and (ch is None or ch < window_start):
             continue
         filt.append(w)
 
@@ -166,7 +166,15 @@ def collect():
         if st == "Done":
             continue
         try:
-            j = _get(BASE + "workItems/%s/updates?api-version=7.0" % w["id"])
+            values = []
+            skip = 0
+            while True:
+                page = _get(BASE + "workItems/%s/updates?api-version=7.0&$top=200&$skip=%s" % (w["id"], skip)).get("value", [])
+                values.extend(page)
+                if len(page) < 200:
+                    break
+                skip += len(page)
+            j = {"value": values}
         except Exception:
             j = {"value": []}
         last = None
@@ -193,8 +201,7 @@ def collect():
                 if ip.get("oldValue"): iters.add(ip["oldValue"])
         if not iters and w["fields"].get("System.IterationPath"):
             iters.add(w["fields"]["System.IterationPath"])
-        base = last or parse_dt(w["fields"].get("System.ChangedDate")) or now
-        upd[w["id"]] = {"dwell": (now - base).days, "carry": len(iters)}
+        upd[w["id"]] = {"dwell": (now - last).days if last else None, "carry": len(iters)}
 
     # enrich -> compact object
     assignees, projects, reasons, types, states = [], [], [], [], []
@@ -202,7 +209,7 @@ def collect():
         if v not in arr:
             arr.append(v)
         return arr.index(v)
-    dp = lambda s: (s[:10] if s else None)
+    dp = lambda s: (parse_dt(s).astimezone(timezone(timedelta(hours=9))).date().isoformat() if parse_dt(s) else None)
 
     rows = []
     for w in filt:
@@ -221,14 +228,15 @@ def collect():
         rows.append([
             w["id"], idx(types, ty), idx(states, st), idx(assignees, who),
             dp(f.get("System.CreatedDate")), dp(f.get("Microsoft.VSTS.Common.ClosedDate")),
-            f.get("System.Title"), (desc.get(w["id"], "") or "")[:45],
+            f.get("System.Title"), desc.get(w["id"], "") or "",
             idx(projects, classify(f.get("System.Title"))),
             dwell, carry, idx(reasons, reason(st, ty, dwell, carry)), cyc,
             dp(f.get("System.ChangedDate")),
+            f.get("System.Tags", ""),
         ])
     return {"a": assignees, "p": projects, "r": reasons, "t": types, "s": states,
             "cols": ["id", "type", "state", "assignee", "created", "closed", "title",
-                     "desc", "project", "dwell", "carry", "reason", "cycle", "changed"],
+                     "desc", "project", "dwell", "carry", "reason", "cycle", "changed", "tags"],
             "rows": rows}
 
 # ---------------- HTML ----------------
@@ -689,6 +697,10 @@ new Chart(document.getElementById('cCycle'),{type:'bar',data:{labels:memOrder,
 </html>'''
 
 def build_html(obj):
+    from report_view import render
+    return render(obj)
+
+def legacy_build_html(obj):
     now = datetime.now(timezone.utc)
     start = now - timedelta(days=WINDOW_DAYS)
     range_label = "%s ~ %s" % (start.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
@@ -719,3 +731,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

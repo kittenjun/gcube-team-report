@@ -1,6 +1,12 @@
 name: Publish GCUBE report
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '*.py'
+      - '*template.html'
+      - '.github/workflows/publish.yml'
   schedule:
     # 매일 22:00 UTC = 07:00 KST(다음날). 시간 조정은 cron 값을 바꾸세요.
     - cron: '0 22 * * *'
@@ -24,6 +30,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
+      - name: Collect Confluence weekly reports
+        env:
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+        run: python collect_confluence.py
 
       - name: Generate index.html
         env:

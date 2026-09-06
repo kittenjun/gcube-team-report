@@ -12,10 +12,19 @@ class SafeHTML(HTMLParser):
         self.output = []
     def handle_starttag(self, tag, attrs):
         if tag in self.allowed:
-            self.output.append('<'+tag+'>')
+            safe_attrs = ''
+            if tag in ('td', 'th'):
+                for name, value in attrs:
+                    if name in ('colspan', 'rowspan') and value and value.isdigit() and 1 <= int(value) <= 1000:
+                        safe_attrs += f' {name}="{int(value)}"'
+            if tag == 'table':
+                self.output.append('<div class="weekly-table">')
+            self.output.append('<'+tag+safe_attrs+'>')
     def handle_endtag(self, tag):
         if tag in self.allowed and tag not in ('br', 'hr'):
             self.output.append('</'+tag+'>')
+            if tag == 'table':
+                self.output.append('</div>')
     def handle_data(self, data):
         self.output.append(html.escape(data))
 
